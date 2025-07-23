@@ -1,5 +1,4 @@
-# Seismic Arrival-Time ML Pipeline for LabNet 
-<br>
+# Seismic Arrival-Time ML Pipeline for LabNet <br>
 ## University of Texas at Austin
 Created by Isaac Xu and Dr. Chas Bolton
 # Download instructions
