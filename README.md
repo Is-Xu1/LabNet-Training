@@ -10,3 +10,13 @@ LabNet library to easily adapt code.
 These scripts were developed to adapt PhaseNet (Zhu et al. 2018) to higher-frequency laboratory data. The backbone
 of these scripts were developed using the Seisbench python library and primarily uses the object VariableLengthPhaseNet
 which allows for a variable input layer size. 
+# Extra scripts
+We experimented with several preprocessing methods, the scripts for training and inferencing these models are stored in
+ExtraScripts directory, the preprocessing codes are the following: <br>
+AN - Amplitude Scaling with Window Normalization <br>
+AN2 - Amplitude Scaling with Whole Waveform Normalization <br>
+ANB - Amplitude Scaling with Whole Waveform Normalization and Bandpass Filter <br>
+ANBR - Amplitude Scaling with Whole Waveform Normalization and Bandpass Filter and Randomly Augmented Pick Window Added <br>
+ANR - Amplitude Scaling with Whole Waveform Normalization  and Randomly Augmented Pick Window Added <br>
+ANRV - Amplitude Scaling with Whole Waveform Normalization and Randomly Augmented Pick Window Added and Validation Script Stop <br>
+ANRC - Amplitude Scaling with Whole Waveform Normalization and Randomly Augmented Pick Window Added and Cirriculum Training 
