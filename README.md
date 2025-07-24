@@ -9,8 +9,7 @@ LabNet library to easily adapt code.
 # Background
 These scripts were developed to adapt PhaseNet (Zhu et al. 2018) to higher-frequency laboratory data. The backbone
 of these scripts were developed using the Seisbench python library and primarily uses the object VariableLengthPhaseNet
-which allows for a variable input layer size - needed for higher frequency data (1-5 MHz. 
-# Preprocessing
+which allows for a variable input layer size - needed for higher frequency data (1-5 MHz). <br> 
 The main scripts for training and inference is model_validationAN.py and phasenet_custom_trainingANR.py, the codes are located below
 for reference. 
 # Extra scripts
