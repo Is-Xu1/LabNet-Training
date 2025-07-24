@@ -11,7 +11,7 @@ These scripts were developed to adapt PhaseNet (Zhu et al. 2018) to higher-frequ
 of these scripts were developed using the Seisbench python library and primarily uses the object VariableLengthPhaseNet
 which allows for a variable input layer size - needed for higher frequency data (1-5 MHz). <br> 
 The main scripts for training and inference is model_validationAN.py and phasenet_custom_trainingANR.py, the codes are located below
-for reference. 
+for reference. These are built to read from csv's porduced from a trace marking script found [here](https://github.com/Is-Xu1/waveform_marking_bolton/tree/main)
 # Extra scripts
 We experimented with several preprocessing methods, the scripts for training and inferencing these models are stored in
 ExtraScripts directory, the preprocessing codes are the following: <br>
