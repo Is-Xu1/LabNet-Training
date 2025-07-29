@@ -27,14 +27,33 @@ def apply_gaussian_mask(length, index, std=100):
 
 class PhaseNetLoss(torch.nn.Module):
     """
-    
+    Custom PyTorch loss function for calculating model loss for training
+
+    This loss function:
+    - Uses 1-10 noise to p-wave arrival ratio for class weighting
+    - Calculates BCE (Binary Cross Entropy) loss for two classes, noise and p-wave arrival
     """
     def __init__(self, eps=1e-6, weights=None):
+        """
+        Initializes PyTorch loss Function
+        Args:
+            eps (float): small constant to clamp prediction and prevent log(0) errors
+            weights (torch.tensor): class weights for [noise, p-wave], defaults to torch.tensor([0.1,1.0])
+        """
         super().__init__()
         self.eps = eps
         self.weights = weights or torch.tensor([0.1, 1.0])
 
     def forward(self, prediction, target):
+        """
+        Compute weighted BCE loss for noise and P-wave classes
+        Args:
+            prediction (torch.Tensor): model output probabilities with shape (batch_size,2,window_size)
+            target (torch.Tensor): Ground truth labels with shape (batch_size,2,window_size)
+        
+        Returns:
+            torch.Tensor: Scalar loss value
+        """
         weights = self.weights.to(prediction.device)
         loss = 0.0
         for c in range(prediction.shape[1]):
@@ -44,13 +63,32 @@ class PhaseNetLoss(torch.nn.Module):
         return loss
 
 class SlidingWindowDataset(Dataset):
-    def __init__(self, root_dir, label_csv, window_size=50000, stride=20000, gauss_std=200,
-                 amp_scale_range=(0.8, 1.2), filter_config=None, augmented_pick_windows=2):
+    """
+    Custom PyTorch Dataset for generating sliding windows of waveform data.
+
+    This dataset:
+    - Loads and normalizes waveforms from .mseed files.
+    - Generates sliding windows with pick/noise labels.
+    - Augments pick windows with random shifts and amplitude scaling
+    """
+    def __init__(self, root_dir, label_csv, window_size=50000, stride=20000, gauss_std=100,
+                 amp_scale_range=(0.8, 1.2), augmented_pick_windows=2):
+        """
+        Initializes a custom PyTorch Dataset by loading picks, caching and windowing traces, and generating sliding windows
+
+        Args:
+            root_dir (str): Root directory containing waveform data 
+            label_csv (str): .csv file containing label picks with 'Name' and 'marked_point' columns
+            window_size (int): window size of the traces in samples defaults to 50000
+            stride (int): stride or the start of the windowing traces defaults to 20000
+            gauss_std (int): gaussian standard deviation mask placed over pick defaults to 100
+            amp_scale_range (tuple): randomly scales the amplitude between value defaults to (0.8,1.2)
+            augmented_pick_windows (int): adds pick windows to dataset by adding randomly shifted p-picks windows to balance dataset defaults to 2
+        """
         self.window_size = window_size
         self.stride = stride
         self.gauss_std = gauss_std
         self.amp_scale_range = amp_scale_range
-        self.filter_config = filter_config or {"lowcut": 1e5, "highcut": 1.5e6, "order": 4}
         self.augmented_pick_windows = augmented_pick_windows
         self.data = []
         self.waveform_cache = {}
@@ -76,6 +114,9 @@ class SlidingWindowDataset(Dataset):
             file.write('\n'+str(pick_windows / len(self.data) * 100))
 
     def _cache_and_window_traces(self, root_dir):
+        """
+        Caches traces and generates dataset with windows by normalizing, and padding if shorter than window 
+        """
         mseed_paths = [
             os.path.join(root, f)
             for root, _, files in os.walk(root_dir)
@@ -89,10 +130,7 @@ class SlidingWindowDataset(Dataset):
                     name = self._build_name(path, i)
                     waveform = tr.data.astype(np.float32)
 
-                    # Step 1: Apply bandpass filter (removed)
-            
-
-                    # Step 2: Global normalization
+                    #Global normalization
                     std = waveform.std()
                     if std > 1e-6:
                         waveform = (waveform - waveform.mean()) / std
@@ -112,6 +150,15 @@ class SlidingWindowDataset(Dataset):
         print(f"❌ Discarded {discarded} windows with edge picks.")
 
     def _build_name(self, path, trace_index):
+        """
+        builds Name label using the directory of the waveform data
+
+        Args:
+            path (str): path containing waveform data
+            trace_index (int): Index of the trace within the file (starts at 1)
+        Returns:
+            trace_label (str): built trace label which should correspond to the label csv
+        """
         parts = path.split(os.sep)
         exp = next(p for p in parts if p.startswith("Exp_")).replace("Exp_", "")
         run = next((p for p in parts if p.startswith("Run")), "RunX")
@@ -119,13 +166,24 @@ class SlidingWindowDataset(Dataset):
         return f"p_picks_Exp_{exp}_{run}_{event}_trace{trace_index + 1}"
 
     def _generate_windows(self, name, waveform, pick_idx):
+        """
+        Splits a trace into sliding windows and masks pick with Gaussian standard deviation
+
+        Args:
+            name (str): waveform label
+            waveform (np.ndarray): normalized waveform
+            pick_idx (int): index of pick
+
+        Returns: 
+            discarded (int): number of windows discarded
+        """
         L = len(waveform)
         discarded = 0
         for start in range(0, L - self.window_size + 1, self.stride):
             end = start + self.window_size
             if pick_idx >= 0:
                 if start + 2000 <= pick_idx < end - 2000:
-                    # Original pick window
+                    # Adds a pick window if not near edge
                     self.data.append((name, start, pick_idx))
 
                     # 🔍 Random shift augmentation for picks
@@ -136,26 +194,36 @@ class SlidingWindowDataset(Dataset):
                         self.data.append((name, new_start, pick_idx))
 
                 elif pick_idx < start - 2000 or pick_idx >= end + 2000:
+                    # If pick is far away, label as all noise
                     self.data.append((name, start, -1))
                 else:
+                    # Else, discard the window (edge picks)
                     discarded += 1
             else:
+                # If waveform has no pick, all windows are noise
                 self.data.append((name, start, -1))
         return discarded
 
     def __len__(self):
+        """
+        Number of windows cached
+        """
         return len(self.data)
 
     def __getitem__(self, idx):
+        """
+        Retrieves waveform from the cache
+        """
         name, start, pick_idx = self.data[idx]
         waveform = self.waveform_cache[name]
         segment = waveform[start:start + self.window_size]
 
+        # If the segment is less than the window size, pad with zeros
         if len(segment) < self.window_size:
             pad_len = self.window_size - len(segment)
             segment = np.concatenate([segment, np.zeros(pad_len, dtype=np.float32)])
 
-        # Step 3: Amplitude scaling (augmentation)
+        # Step 2: Amplitude scaling (augmentation)
         scale = np.random.uniform(*self.amp_scale_range)
         window = segment * scale
 
@@ -171,8 +239,25 @@ class SlidingWindowDataset(Dataset):
         return torch.tensor(window, dtype=torch.float32).unsqueeze(0), torch.tensor(label, dtype=torch.float32)
     
 
-def train_model(data_dir, label_csv, checkpoint_path, log_csv, window_size, gauss_std, SAMPLING_RATE,
-                epochs=5, batch_size=20, filter_config=None, augmented_pick_windows=2):
+def train_model(data_dir, label_csv, checkpoint_path, log_csv, window_size, gauss_std, stride = 20000,
+                epochs=5, batch_size=20, augmented_pick_windows=2):
+    """
+    Training loop for the model
+    
+    Args:
+        data_dir (str): directory for waveform data
+        label_csv (str): label csv name for csv containing Name and marked_point columns
+        checkpoint_path (str): checkpoint path to path for existing model checkpoint (if none, will create new one)
+        log_csv (str): training log with column Loss and Epoch, used to show loss over epochs
+        window_size (int): size of sliding window 
+        gauss_std (int): gaussian standard deviation of pick mask
+        stride (int): stride per sliding window
+        epochs (int): number of epochs to train the model for default 5
+        batch_size (int): batch of windows to train at a time default 20
+        augmented_pick_windows (int): number of randomly shifted p-pick windows added per trace default 2
+    """
+
+    #use cuda if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"📦 Using device: {device}")
 
@@ -180,10 +265,9 @@ def train_model(data_dir, label_csv, checkpoint_path, log_csv, window_size, gaus
         root_dir=data_dir,
         label_csv=label_csv,
         window_size=window_size,
-        stride=20000,
+        stride=stride,
         gauss_std=gauss_std,
         amp_scale_range=(0.9, 1.1),
-        filter_config=filter_config,
         augmented_pick_windows=augmented_pick_windows
     )
 
@@ -242,7 +326,7 @@ def train_model(data_dir, label_csv, checkpoint_path, log_csv, window_size, gaus
         log.append({"Epoch": epoch, "Avg Loss": avg_loss})
         pd.DataFrame(log).to_csv(log_csv, index=False)
 
-def parse_name(name: str):
+def parse_name(name):
     """
     Parse a waveform name into experiment, run, event, and trace index.
 
@@ -260,7 +344,7 @@ def parse_name(name: str):
     return exp, run, event, trace_index
 
 
-def load_waveform(name_key: str, data_dir: str):
+def load_waveform(name_key, data_dir):
     """
     Load a waveform by its name key from the dataset directory.
 
@@ -290,7 +374,7 @@ def load_waveform(name_key: str, data_dir: str):
     return stream[trace_index].data.astype(np.float32), full_path
 
 
-def normalize_waveform(waveform: np.ndarray) -> np.ndarray:
+def normalize_waveform(waveform):
     """
     Normalize waveform using standard deviation normalization.
     Falls back to zeros if std is too small.
@@ -307,7 +391,7 @@ def normalize_waveform(waveform: np.ndarray) -> np.ndarray:
     return np.zeros_like(waveform)
 
 
-def sliding_window_inference(model, waveform, window_size=50_000, stride=20_000, device="cpu"):
+def sliding_window_inference(model, waveform, window_size=50000, stride=20000, device="cpu"):
     """
     Perform sliding window inference on a waveform.
 
@@ -321,6 +405,7 @@ def sliding_window_inference(model, waveform, window_size=50_000, stride=20_000,
     Returns:
         tuple: (probs_p, probs_noise)
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     probs = np.zeros((2, len(waveform)))
     count = np.zeros(len(waveform))
 
@@ -364,7 +449,7 @@ def detect_p_picks(probs_p, threshold=0.5, min_distance=3000):
     return peaks
 
 
-def load_model(checkpoint_path: str, device: str = "cpu"):
+def load_model(checkpoint_path, device = "cpu"):
     """
     Load a trained VariableLengthPhaseNet model from checkpoint.
 
@@ -375,6 +460,7 @@ def load_model(checkpoint_path: str, device: str = "cpu"):
     Returns:
         torch.nn.Module: Loaded model in evaluation mode.
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = VariableLengthPhaseNet(
         in_channels=1,
         classes=2,
