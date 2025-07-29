@@ -1,4 +1,4 @@
-# Seismic Arrival-Time ML Pipeline for LabNet <br>
+# Seismic Arrival-Time ML Pipeline for LabNet: Deep Learning for High-Frequency Seismic Data <br>
 ## University of Texas at Austin
 Created by Isaac Xu and Dr. Chas Bolton
 # Download instructions
