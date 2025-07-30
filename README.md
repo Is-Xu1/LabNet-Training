@@ -5,7 +5,7 @@ Created by Isaac Xu and Dr. Chas Bolton
 Download LabNet.py file and run requirements.txt 
 # Overview
 Machine learning pipeline developed for Bolton laboratory with scripts for model training and inference as well as 
-LabNet library to easily adapt code. 
+LabNet library to easily adapt code. Documentation is found [here](https://www.notion.so/LabNet-Documentation-24094d2dd03d80909cefe76507690111?source=copy_link)
 # Background
 These scripts were developed to adapt PhaseNet (Zhu et al. 2018) to higher-frequency laboratory data. The backbone
 of these scripts were developed using the Seisbench python library and primarily uses the object VariableLengthPhaseNet
